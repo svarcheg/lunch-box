@@ -6,9 +6,11 @@ open NUnit.Framework
 open btcore.Engine
 open btcore.Currency
 
-type State = {User : option<UserId>;Account : option<Account<RUB>>}
+type State = {User : option<UserId>;Account : option<Account<RUB>>; MarketData : option<MarketData<RUB>>}
 
-let mutable state = {User = None;Account = None}
+let mutable state = {User = None;Account = None; MarketData=None}
+
+let toRUB amount = amount * 1.0m<RUB>
 
 let [<Given>] ``^(.+) is identified$`` (userName : string) = 
     state <- match identifyUser userName with
@@ -16,10 +18,16 @@ let [<Given>] ``^(.+) is identified$`` (userName : string) =
             | Failure err -> {state with User = None}
 
 let [<Given>] ``^s?he has ([0-9]+) on (?:his|her) account$``(amount : int) = 
-    state <- {state with Account = Some (createAccount ((decimal amount) *  1.0m<RUB>))}
+    state <- {state with Account =  amount |> decimal |> toRUB |> createAccount |> Some}
+    
+let [<Given>] ``^(\w+) is selling at ([0-9]+) per share$``(instrument: string) (price : int) = 
+    state <- {state with MarketData = price |> decimal |> toRUB |> (fun a -> Map [(InstrumentCode instrument, a)]) |> MarketData |> Some} 
 
-let [<Given>] ``^(\w+) is selling at ([0-9]+) per share$``(instrument: string) (price : int) = ()
-let [<When>] ``^s?he buys ([0-9]+) shares of (\w+)$``(quantity : int) (instrument: string) = ()
+let [<When>] ``^s?he buys ([0-9]+) shares of (\w+)$``(quantity : int) (instrument: string) = 
+    let order = {OrderType=Market;Side=Buy; InstrumentCode = InstrumentCode instrument; Quantity=quantity;Account=state.Account.Value;}
+    let execution = executeOrder state.MarketData.Value order
+    ()
+    
 let [<Then>] ``^s?he should get a confirmation of success$``() = ()
 let [<Then>] ``^h(?:is|er) account balance should be ([0-9]+)$``(amount :int) = ()
 let [<Then>] ``^h(?:is|er) portfolio should contain ([0-9]+) shares? of (\w+)$`` (quantity :int) (symbol : string) = ()
